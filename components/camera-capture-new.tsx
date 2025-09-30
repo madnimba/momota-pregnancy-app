@@ -1,0 +1,401 @@
+"use client"
+
+import type React from "react"
+import { useState, useRef, useEffect } from "react"
+import { Camera, Upload, X, RotateCcw } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { useLanguage } from "@/lib/language-context"
+
+interface CameraCaptureProps {
+  onImageCapture: (imageData: string) => void
+  label?: string
+}
+
+export function CameraCapture({ onImageCapture, label }: CameraCaptureProps) {
+  const [preview, setPreview] = useState<string | null>(null)
+  const [showCamera, setShowCamera] = useState(false)
+  const [stream, setStream] = useState<MediaStream | null>(null)
+  const [isVideoReady, setIsVideoReady] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { t } = useLanguage()
+
+  // Load saved photo on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("momota-last-photo")
+      if (saved) setPreview(saved)
+    } catch (error) {
+      console.warn("Could not load saved photo:", error)
+    }
+  }, [])
+
+  // Cleanup stream on unmount
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop())
+      }
+    }
+  }, [stream])
+
+  const startCamera = async () => {
+    try {
+      setIsVideoReady(false)
+      setCameraError(null)
+      
+      // Check if camera is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera not supported in this browser")
+      }
+      
+      // Request camera access with constraints
+      let mediaStream: MediaStream
+      try {
+        // Try back camera first (environment)
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false,
+        })
+      } catch (envError) {
+        console.warn("Back camera failed, trying front camera:", envError)
+        // Fallback to any available camera
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false,
+        })
+      }
+
+      setStream(mediaStream)
+      setShowCamera(true)
+
+      if (videoRef.current) {
+        const video = videoRef.current
+        
+        // Configure video element for mobile compatibility
+        video.muted = true
+        video.playsInline = true
+        video.autoplay = true
+        video.srcObject = mediaStream
+
+        // Function to check if video has valid dimensions
+        const checkVideoReady = () => {
+          if (video.videoWidth > 0 && video.videoHeight > 0) {
+            console.log("Video ready with dimensions:", video.videoWidth, "x", video.videoHeight)
+            setIsVideoReady(true)
+            return true
+          }
+          return false
+        }
+
+        // Set up event handlers
+        const handleLoadedMetadata = () => {
+          console.log("Video metadata loaded")
+          checkVideoReady()
+        }
+
+        const handleCanPlay = () => {
+          console.log("Video can play")
+          // Small delay to ensure dimensions are available
+          setTimeout(checkVideoReady, 100)
+        }
+
+        const handlePlaying = () => {
+          console.log("Video is playing")
+          checkVideoReady()
+        }
+
+        // Add event listeners
+        video.addEventListener('loadedmetadata', handleLoadedMetadata)
+        video.addEventListener('canplay', handleCanPlay)
+        video.addEventListener('playing', handlePlaying)
+
+        // Try to start playback
+        const playPromise = video.play()
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log("Video playback started successfully")
+              // Check again after play starts
+              setTimeout(checkVideoReady, 200)
+            })
+            .catch((error) => {
+              console.warn("Video autoplay was prevented:", error)
+              // Even if autoplay fails, we can still try to capture
+              checkVideoReady()
+            })
+        }
+
+        // Fallback timeout to force ready state if needed
+        const timeoutId = setTimeout(() => {
+          if (!isVideoReady) {
+            console.warn("Video ready timeout - forcing ready state")
+            setIsVideoReady(true)
+          }
+        }, 3000)
+
+        // Cleanup function
+        return () => {
+          clearTimeout(timeoutId)
+          video.removeEventListener('loadedmetadata', handleLoadedMetadata)
+          video.removeEventListener('canplay', handleCanPlay)
+          video.removeEventListener('playing', handlePlaying)
+        }
+      }
+    } catch (error) {
+      console.error("Camera startup failed:", error)
+      const errorMessage = error instanceof Error ? error.message : "Unknown camera error"
+      setCameraError(errorMessage)
+      setShowCamera(false)
+    }
+  }
+
+  const capturePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) {
+      console.error("Video or canvas ref not available")
+      return
+    }
+
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    
+    // Get video dimensions
+    const width = video.videoWidth || video.clientWidth
+    const height = video.videoHeight || video.clientHeight
+    
+    if (!width || !height) {
+      console.warn("Could not get video dimensions:", { width, height })
+      // Try with client dimensions as fallback
+      const fallbackWidth = video.clientWidth || 640
+      const fallbackHeight = video.clientHeight || 480
+      canvas.width = fallbackWidth
+      canvas.height = fallbackHeight
+    } else {
+      canvas.width = width
+      canvas.height = height
+    }
+
+    const ctx = canvas.getContext("2d")
+    if (!ctx) {
+      console.error("Could not get canvas context")
+      return
+    }
+
+    try {
+      // Draw the current video frame
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      
+      // Convert to base64 image
+      const imageData = canvas.toDataURL("image/jpeg", 0.8)
+      
+      if (imageData && imageData !== "data:,") {
+        console.log("Photo captured successfully")
+        setPreview(imageData)
+        
+        // Save to localStorage
+        try {
+          localStorage.setItem("momota-last-photo", imageData)
+        } catch (storageError) {
+          console.warn("Could not save to localStorage:", storageError)
+        }
+        
+        // Call the callback
+        onImageCapture(imageData)
+        
+        // Stop the camera
+        stopCamera()
+      } else {
+        console.error("Failed to capture image data")
+        setCameraError("Failed to capture image")
+      }
+    } catch (captureError) {
+      console.error("Error during photo capture:", captureError)
+      setCameraError("Failed to capture photo")
+    }
+  }
+
+  const stopCamera = () => {
+    console.log("Stopping camera")
+    
+    if (stream) {
+      stream.getTracks().forEach((track) => {
+        console.log("Stopping track:", track.kind, track.label)
+        track.stop()
+      })
+      setStream(null)
+    }
+    
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+    
+    setShowCamera(false)
+    setIsVideoReady(false)
+    setCameraError(null)
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const result = reader.result as string
+        setPreview(result)
+        try {
+          localStorage.setItem("momota-last-photo", result)
+        } catch (error) {
+          console.warn("Could not save uploaded image:", error)
+        }
+        onImageCapture(result)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const clearImage = () => {
+    setPreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+    try {
+      localStorage.removeItem("momota-last-photo")
+    } catch (error) {
+      console.warn("Could not clear saved photo:", error)
+    }
+  }
+
+  // Camera view
+  if (showCamera) {
+    return (
+      <Card className="relative overflow-hidden bg-black">
+        <video 
+          ref={videoRef} 
+          autoPlay 
+          playsInline 
+          muted 
+          className="w-full h-64 object-cover"
+          style={{ backgroundColor: '#000' }}
+        />
+        <canvas ref={canvasRef} className="hidden" />
+        
+        {/* Loading overlay */}
+        {!isVideoReady && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-75">
+            <div className="text-white text-sm mb-2">
+              {t("Starting camera...", "ক্যামেরা চালু হচ্ছে...")}
+            </div>
+            <div className="text-white text-xs opacity-75">
+              {t("Please allow camera access", "ক্যামেরা অ্যাক্সেসের অনুমতি দিন")}
+            </div>
+          </div>
+        )}
+        
+        {/* Camera controls */}
+        <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-3 px-4">
+          <Button 
+            size="lg" 
+            onClick={capturePhoto} 
+            className="rounded-full w-16 h-16 p-0 bg-white text-black hover:bg-gray-100" 
+            disabled={!isVideoReady}
+          >
+            <Camera className="h-6 w-6" />
+          </Button>
+          
+          <Button 
+            size="lg" 
+            variant="secondary" 
+            onClick={stopCamera} 
+            className="rounded-full"
+          >
+            <X className="h-5 w-5 mr-2" />
+            {t("Cancel", "বাতিল")}
+          </Button>
+        </div>
+      </Card>
+    )
+  }
+
+  // Main interface
+  return (
+    <div className="space-y-3">
+      {preview ? (
+        <Card className="relative overflow-hidden">
+          <img 
+            src={preview} 
+            alt="Captured" 
+            className="w-full h-64 object-cover" 
+          />
+          <div className="absolute top-2 right-2 flex gap-2">
+            <Button 
+              size="icon" 
+              variant="secondary" 
+              onClick={clearImage} 
+              aria-label="Retake photo"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+            <Button 
+              size="icon" 
+              variant="destructive" 
+              onClick={clearImage} 
+              aria-label="Remove image"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <Button
+            variant="outline"
+            className="h-32 flex-col gap-2 border-2 border-dashed hover:border-primary hover:bg-primary/5 bg-transparent"
+            onClick={startCamera}
+          >
+            <Camera className="h-8 w-8" />
+            <span className="text-sm font-medium">
+              {t("Take Photo", "ছবি তুলুন")}
+            </span>
+          </Button>
+
+          <Button
+            variant="outline"
+            className="h-32 flex-col gap-2 border-2 border-dashed hover:border-primary hover:bg-primary/5 bg-transparent"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className="h-8 w-8" />
+            <span className="text-sm font-medium">
+              {t("Upload Photo", "ছবি আপলোড করুন")}
+            </span>
+          </Button>
+        </div>
+      )}
+
+      {/* Error message */}
+      {cameraError && (
+        <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+          {t("Camera error: ", "ক্যামেরা ত্রুটি: ")}{cameraError}
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileChange}
+        aria-label={label || "Image upload"}
+      />
+    </div>
+  )
+}
