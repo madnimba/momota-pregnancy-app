@@ -19,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="bn">
       <body
         className={`font-sans ${GeistSans.variable} ${GeistMono.variable} antialiased`}
         style={{ fontFamily: "'Noto Sans Bengali', 'Geist Sans', sans-serif" }}
