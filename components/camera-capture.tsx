@@ -405,7 +405,7 @@
 
 import type React from "react";
 import { useState, useRef, useEffect } from "react";
-import { Camera, Upload, X, RotateCcw } from "lucide-react";
+import { Camera, Upload, X, RotateCcw, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useLanguage } from "@/lib/language-context";
@@ -421,6 +421,7 @@ export function CameraCapture({ onImageCapture, label }: CameraCaptureProps) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -522,17 +523,17 @@ export function CameraCapture({ onImageCapture, label }: CameraCaptureProps) {
 
       let mediaStream: MediaStream;
       try {
-        // Try back camera first (environment)
+        // Use the current facing mode
         mediaStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: { ideal: "environment" },
+            facingMode: { ideal: facingMode },
             width: { ideal: 1280 },
             height: { ideal: 720 },
           },
           audio: false,
         });
       } catch (envError) {
-        console.warn("Back camera failed, trying default camera:", envError);
+        console.warn(`${facingMode} camera failed, trying default camera:`, envError);
         mediaStream = await navigator.mediaDevices.getUserMedia({
           video: {
             width: { ideal: 1280 },
@@ -550,6 +551,40 @@ export function CameraCapture({ onImageCapture, label }: CameraCaptureProps) {
         error instanceof Error ? error.message : "Unknown camera error";
       setCameraError(errorMessage);
       setShowCamera(false);
+    }
+  };
+
+  const toggleCamera = async () => {
+    // Stop current stream
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+    
+    // Toggle facing mode
+    const newFacingMode = facingMode === "environment" ? "user" : "environment";
+    setFacingMode(newFacingMode);
+    
+    // Restart camera with new facing mode
+    try {
+      setIsVideoReady(false);
+      setCameraError(null);
+
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: newFacingMode },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      setStream(mediaStream);
+    } catch (error) {
+      console.error("Camera toggle failed:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Camera toggle failed";
+      setCameraError(errorMessage);
     }
   };
 
@@ -685,6 +720,17 @@ export function CameraCapture({ onImageCapture, label }: CameraCaptureProps) {
         <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-3 px-4">
           <Button
             size="lg"
+            variant="secondary"
+            onClick={toggleCamera}
+            className="rounded-full w-12 h-12 p-0"
+            disabled={!isVideoReady}
+            aria-label={t("Switch camera", "ক্যামেরা পরিবর্তন করুন")}
+          >
+            <RotateCw className="h-5 w-5" />
+          </Button>
+
+          <Button
+            size="lg"
             onClick={capturePhoto}
             className="rounded-full w-16 h-16 p-0 bg-white text-black hover:bg-gray-100"
             disabled={!isVideoReady}
@@ -697,10 +743,10 @@ export function CameraCapture({ onImageCapture, label }: CameraCaptureProps) {
             size="lg"
             variant="secondary"
             onClick={stopCamera}
-            className="rounded-full"
+            className="rounded-full w-12 h-12 p-0"
+            aria-label={t("Cancel", "বাতিল")}
           >
-            <X className="h-5 w-5 mr-2" />
-            {t("Cancel", "বাতিল")}
+            <X className="h-5 w-5" />
           </Button>
         </div>
       </Card>
@@ -766,12 +812,11 @@ export function CameraCapture({ onImageCapture, label }: CameraCaptureProps) {
         </div>
       )}
 
-      {/* Hidden input for mobile camera fallback (file capture) */}
+      {/* Hidden input for gallery photo selection */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         onChange={handleFileChange}
         aria-label={label || "Image upload"}
