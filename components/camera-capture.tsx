@@ -17,10 +17,18 @@ export function CameraCapture({ onImageCapture, label }: CameraCaptureProps) {
   const [preview, setPreview] = useState<string | null>(null)
   const [showCamera, setShowCamera] = useState(false)
   const [stream, setStream] = useState<MediaStream | null>(null)
+  const [isVideoReady, setIsVideoReady] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useLanguage()
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("momota-last-photo")
+      if (saved) setPreview(saved)
+    } catch {}
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -32,33 +40,102 @@ export function CameraCapture({ onImageCapture, label }: CameraCaptureProps) {
 
   const startCamera = async () => {
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
+      setIsVideoReady(false)
+      const constraints: MediaStreamConstraints = {
         video: { facingMode: "environment" },
         audio: false,
-      })
+      }
+      let mediaStream = await navigator.mediaDevices.getUserMedia(constraints)
       setStream(mediaStream)
       setShowCamera(true)
       if (videoRef.current) {
+        // Ensure autoplay works across browsers (iOS requires muted + playsInline)
+        videoRef.current.muted = true
+        videoRef.current.setAttribute("muted", "")
+        videoRef.current.setAttribute("playsInline", "")
         videoRef.current.srcObject = mediaStream
+        const ensureReady = () => {
+          const video = videoRef.current
+          if (!video) return
+          if (video.videoWidth > 0 && video.videoHeight > 0) {
+            setIsVideoReady(true)
+            return
+          }
+          requestAnimationFrame(ensureReady)
+        }
+        const tryPlay = async () => {
+          try {
+            await videoRef.current?.play()
+          } catch (err) {
+            console.warn("Autoplay prevented; waiting for user gesture.", err)
+          } finally {
+            ensureReady()
+          }
+        }
+        if (videoRef.current.readyState >= 2) {
+          tryPlay()
+        } else {
+          videoRef.current.onloadedmetadata = () => tryPlay()
+          videoRef.current.oncanplay = () => ensureReady()
+        }
       }
     } catch (error) {
-      console.error("Camera access denied:", error)
-      // Fallback to file input if camera access fails
-      fileInputRef.current?.click()
+      console.warn("Camera with environment facingMode failed; retrying with default camera.", error)
+      try {
+        const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        setStream(mediaStream)
+        setShowCamera(true)
+        if (videoRef.current) {
+          videoRef.current.muted = true
+          videoRef.current.setAttribute("muted", "")
+          videoRef.current.setAttribute("playsInline", "")
+          videoRef.current.srcObject = mediaStream
+          const ensureReady = () => {
+            const video = videoRef.current
+            if (!video) return
+            if (video.videoWidth > 0 && video.videoHeight > 0) {
+              setIsVideoReady(true)
+              return
+            }
+            requestAnimationFrame(ensureReady)
+          }
+          videoRef.current.onloadedmetadata = async () => {
+            try {
+              await videoRef.current?.play()
+            } catch (err) {
+              console.warn("Autoplay prevented on fallback.", err)
+            } finally {
+              ensureReady()
+            }
+          }
+        }
+      } catch (fallbackError) {
+        console.error("Camera access denied:", fallbackError)
+        // Fallback to file input if camera access fails
+        fileInputRef.current?.click()
+      }
     }
   }
 
   const capturePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
+    if (videoRef.current && canvasRef.current && isVideoReady) {
       const video = videoRef.current
       const canvas = canvasRef.current
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
+      const width = video.videoWidth
+      const height = video.videoHeight
+      if (!width || !height) {
+        return
+      }
+      canvas.width = width
+      canvas.height = height
       const ctx = canvas.getContext("2d")
       if (ctx) {
-        ctx.drawImage(video, 0, 0)
+        ctx.drawImage(video, 0, 0, width, height)
         const imageData = canvas.toDataURL("image/jpeg")
         setPreview(imageData)
+        try {
+          localStorage.setItem("momota-last-photo", imageData)
+        } catch {}
         onImageCapture(imageData)
         stopCamera()
       }
@@ -80,6 +157,9 @@ export function CameraCapture({ onImageCapture, label }: CameraCaptureProps) {
       reader.onloadend = () => {
         const result = reader.result as string
         setPreview(result)
+        try {
+          localStorage.setItem("momota-last-photo", result)
+        } catch {}
         onImageCapture(result)
       }
       reader.readAsDataURL(file)
@@ -91,15 +171,18 @@ export function CameraCapture({ onImageCapture, label }: CameraCaptureProps) {
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
+    try {
+      localStorage.removeItem("momota-last-photo")
+    } catch {}
   }
 
   if (showCamera) {
     return (
       <Card className="relative overflow-hidden bg-black">
-        <video ref={videoRef} autoPlay playsInline className="w-full h-64 object-cover" />
+        <video ref={videoRef} autoPlay playsInline muted className="w-full h-64 object-cover" />
         <canvas ref={canvasRef} className="hidden" />
         <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-3 px-4">
-          <Button size="lg" onClick={capturePhoto} className="rounded-full w-16 h-16 p-0">
+          <Button size="lg" onClick={capturePhoto} className="rounded-full w-16 h-16 p-0" disabled={!isVideoReady}>
             <Camera className="h-6 w-6" />
           </Button>
           <Button size="lg" variant="secondary" onClick={stopCamera} className="rounded-full">

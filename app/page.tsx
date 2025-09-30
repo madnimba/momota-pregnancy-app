@@ -25,12 +25,12 @@ export default function HomePage() {
     { id: "fever", en: "Fever (>100.4°F)", bn: "জ্বর (>১০০.৪°F)" },
     { id: "high-fever", en: "High fever (>102°F)", bn: "উচ্চ জ্বর (>১০২°F)" },
     { id: "severe-pain", en: "Severe abdominal pain", bn: "তীব্র পেটে ব্যথা" },
-    { id: "bleeding", en: "Vaginal bleeding", bn: "যোনি রক্তপাত" },
-    { id: "difficulty-breathing", en: "Difficulty breathing", bn: "শ্বাস নিতে অসুবিধা" },
-    { id: "dizziness", en: "Dizziness or fainting", bn: "মাথা ঘোরা বা অজ্ঞান" },
+    { id: "bleeding", en: "Vaginal bleeding", bn: "গর্ভাবস্থায় রক্তপাত" },
+    { id: "difficulty-breathing", en: "Difficulty breathing", bn: "শ্বাসকষ্ট" },
+    { id: "dizziness", en: "Dizziness or fainting", bn: "মাথা ঘোরা বা জ্ঞান হারানো" },
     { id: "pain", en: "Abdominal pain", bn: "পেটে ব্যথা" },
     { id: "burning", en: "Burning during urination", bn: "প্রস্রাবে জ্বালাপোড়া" },
-    { id: "discharge", en: "Unusual discharge", bn: "অস্বাভাবিক স্রাব" },
+    { id: "discharge", en: "Unusual discharge", bn: "অস্বাভাবিক সাদাস্রাব" },
     { id: "headache", en: "Persistent headache", bn: "ক্রমাগত মাথাব্যথা" },
   ]
 
@@ -91,7 +91,7 @@ export default function HomePage() {
           <p className="text-sm text-muted-foreground text-balance leading-relaxed">
             {t(
               "Are you experiencing any discomfort or symptoms? Let me help you.",
-              "আপনি কি কোনো অস্বস্তি বা লক্ষণ অনুভব করছেন? আমি আপনাকে সাহায্য করি।",
+              "আপনি কি কোনো অস্বস্তি বোধ করছেন? আমাকে বিস্তারিত জানান।",
             )}
           </p>
         </div>
@@ -101,24 +101,24 @@ export default function HomePage() {
             <div className="flex items-start gap-3 mb-4">
               <Stethoscope className="h-6 w-6 text-purple-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="font-semibold text-balance mb-1">{t("Quick Symptom Check", "দ্রুত লক্ষণ পরীক্ষা")}</h3>
+                <h3 className="font-semibold text-balance mb-1">{t("Quick Symptom Check", "দ্রুত স্বাস্থ্য পরীক্ষা")}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {t(
                     "Tell me what you're feeling, and I'll help assess if you need immediate care",
-                    "আপনি কী অনুভব করছেন তা বলুন, আমি মূল্যায়ন করতে সাহায্য করব",
+                    "আপনার অসুবিধা খুলে বলুন, আমি মূল্যায়নে সাহায্য করব",
                   )}
                 </p>
               </div>
             </div>
             <Button onClick={() => setShowSymptomChecker(true)} className="w-full" size="lg">
-              {t("Check My Symptoms", "আমার লক্ষণ পরীক্ষা করুন")}
+              {t("Check My Symptoms", "লক্ষণগুলো যাচাই করুন")}
             </Button>
           </Card>
         ) : (
           <>
             <Card className="p-5 space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold">{t("Select your symptoms", "আপনার লক্ষণ নির্বাচন করুন")}</h3>
+                <h3 className="font-semibold">{t("Select your symptoms", "সমস্যা নির্বাচন করুন")}</h3>
                 <Button variant="ghost" size="sm" onClick={() => setShowSymptomChecker(false)}>
                   {t("Cancel", "বাতিল")}
                 </Button>
@@ -142,7 +142,7 @@ export default function HomePage() {
 
               {symptoms.length > 0 && (
                 <Button onClick={handleAnalysis} className="w-full" size="lg">
-                  {t("Assess Symptoms", "লক্ষণ মূল্যায়ন করুন")} ({symptoms.length})
+                  {t("Assess Symptoms", "মূল্যায়ন করুন")} ({symptoms.length})
                 </Button>
               )}
             </Card>
@@ -156,7 +156,7 @@ export default function HomePage() {
                   >
                     {t(
                       result.urgency === "urgent" ? "URGENT" : "Monitor",
-                      result.urgency === "urgent" ? "জরুরি" : "পর্যবেক্ষণ",
+                      result.urgency === "urgent" ? "জরুরি সেবা নিন" : "পর্যবেক্ষণে থাকুন",
                     )}
                   </div>
                 </div>
@@ -204,7 +204,7 @@ export default function HomePage() {
         )}
 
         <div className="space-y-3">
-          <h3 className="font-semibold text-lg px-1">{t("Smart Health Tools", "স্মার্ট স্বাস্থ্য সরঞ্জাম")}</h3>
+          <h3 className="font-semibold text-lg px-1">{t("Smart Health Tools", "স্মার্ট স্বাস্থ্য চেকাপ")}</h3>
 
           <Link href="/tools/anemia">
             <Card className="p-4 hover:shadow-md transition-shadow bg-gradient-to-br from-card to-red-50 border-red-200">
@@ -213,9 +213,9 @@ export default function HomePage() {
                   <Droplet className="w-6 h-6 text-red-600" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-balance">{t("Anemia Detection", "রক্তস্বল্পতা সনাক্তকরণ")}</h4>
+                  <h4 className="font-semibold text-balance">{t("Anemia Detection", "রক্তস্বল্পতা শনাক্তকরণ")}</h4>
                   <p className="text-xs text-muted-foreground">
-                    {t("Photo-based anemia check", "ছবি-ভিত্তিক রক্তস্বল্পতা পরীক্ষা")}
+                    {t("Photo-based anemia check", "ইমেজ এনালাইসিসের মাধ্যমে রক্তস্বল্পতা যাচাই")}
                   </p>
                 </div>
               </div>
@@ -260,7 +260,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h4 className="font-semibold text-balance">
-                    {t("Diet & Nutrition Planner", "খাদ্য ও পুষ্টি পরিকল্পনাকারী")}
+                    {t("Diet & Nutrition Planner", "খাদ্য ও পুষ্টি পরিকল্পনা")}
                   </h4>
                   <p className="text-xs text-muted-foreground">
                     {t("Meal analysis & planning", "খাবার বিশ্লেষণ ও পরিকল্পনা")}
@@ -272,7 +272,7 @@ export default function HomePage() {
 
           <Link href="/tools">
             <Button variant="outline" className="w-full bg-transparent">
-              {t("View All Tools", "সব সরঞ্জাম দেখুন")}
+              {t("View All Tools", "সব চেকআপ টুলস")}
             </Button>
           </Link>
         </div>
@@ -289,16 +289,16 @@ export default function HomePage() {
           </Card>
           <Card className="p-3 text-center bg-gradient-to-br from-card to-accent/10">
             <Heart className="w-6 h-6 text-accent mx-auto mb-2" fill="currentColor" />
-            <p className="text-xs font-medium">{t("24/7 Care", "২৪/৭ যত্ন")}</p>
+            <p className="text-xs font-medium">{t("24/7 Care", "২৪/৭ স্বাস্থ্যসেবা")}</p>
           </Card>
         </div>
 
         {/* Footer */}
         <footer className="text-center text-sm text-muted-foreground space-y-2 pt-4">
-          <p className="text-xs">{t("Built with care for mothers", "মায়েদের জন্য যত্ন সহকারে নির্মিত")}</p>
+          <p className="text-xs">{t("Built with care for mothers", "নতুন মায়ের ২৪/৭ স্বাস্থ্যসেবা")}</p>
           <div className="flex justify-center gap-4 text-xs">
             <Link href="/about" className="hover:text-foreground transition-colors">
-              {t("About", "সম্পর্কে")}
+              {t("About", "আমাদের সম্পর্কে")}
             </Link>
             <span>•</span>
             <Link href="/settings" className="hover:text-foreground transition-colors">
