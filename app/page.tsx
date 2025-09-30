@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Heart, Shield, Brain, Volume2, Save, AlertTriangle, Activity, Droplet, Apple, Stethoscope } from "lucide-react"
 import Link from "next/link"
 import { analyzeInfection, type InfectionResult } from "@/lib/ai-mock"
+import { analyzeSymptomsCombined, type SymptomAnalysisResult } from "@/lib/ai-symptom-analysis"
 import { speak } from "@/lib/speech"
 import { saveHealthLog } from "@/lib/storage"
 import { useRouter } from "next/navigation"
@@ -18,7 +19,8 @@ export default function HomePage() {
   const { t, language } = useLanguage()
   const router = useRouter()
   const [symptoms, setSymptoms] = useState<string[]>([])
-  const [result, setResult] = useState<InfectionResult | null>(null)
+  const [symptomDescription, setSymptomDescription] = useState<string>("")
+  const [result, setResult] = useState<SymptomAnalysisResult | null>(null)
   const [showSymptomChecker, setShowSymptomChecker] = useState(false)
 
   const symptomOptions = [
@@ -39,8 +41,8 @@ export default function HomePage() {
   }
 
   const handleAnalysis = () => {
-    if (symptoms.length === 0) return
-    const analysisResult = analyzeInfection(symptoms)
+    if (symptoms.length === 0 && !symptomDescription.trim()) return
+    const analysisResult = analyzeSymptomsCombined(symptoms, symptomDescription)
     setResult(analysisResult)
     speak(analysisResult.message[language], language)
   }
@@ -48,8 +50,8 @@ export default function HomePage() {
   const saveLog = () => {
     if (!result) return
     saveHealthLog({
-      type: "infection",
-      data: { symptoms, urgency: result.urgency },
+      type: "symptom-analysis",
+      data: { symptoms, description: symptomDescription, urgency: result.urgency },
       result: result.message.en,
       riskLevel: result.riskLevel,
     })
@@ -140,9 +142,31 @@ export default function HomePage() {
                 ))}
               </div>
 
-              {symptoms.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  {t("Describe your symptoms in detail", "আপনার সমস্যার বিস্তারিত বর্ণনা দিন")}
+                </label>
+                <textarea
+                  className="w-full min-h-[100px] p-3 border border-input rounded-md bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                  placeholder={t(
+                    "Describe how you're feeling in English or Bangla. Be as detailed as possible about your symptoms, when they started, and how severe they are...",
+                    "ইংরেজি বা বাংলায় আপনার অনুভূতি বর্ণনা করুন। আপনার লক্ষণগুলি, কখন শুরু হয়েছে এবং কতটা তীব্র সে সম্পর্কে যতটা সম্ভব বিস্তারিত বলুন..."
+                  )}
+                  value={symptomDescription}
+                  onChange={(e) => setSymptomDescription(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "AI will analyze your description along with selected symptoms to provide better recommendations",
+                    "এআই আপনার বর্ণনা এবং নির্বাচিত লক্ষণগুলি বিশ্লেষণ করে আরও ভাল পরামর্শ দেবে"
+                  )}
+                </p>
+              </div>
+
+              {(symptoms.length > 0 || symptomDescription.trim()) && (
                 <Button onClick={handleAnalysis} className="w-full" size="lg">
-                  {t("Assess Symptoms", "মূল্যায়ন করুন")} ({symptoms.length})
+                  {t("Analyze Symptoms", "লক্ষণ বিশ্লেষণ করুন")} 
+                  {symptoms.length > 0 && ` (${symptoms.length})`}
                 </Button>
               )}
             </Card>
@@ -155,8 +179,8 @@ export default function HomePage() {
                     className={`px-3 py-1 rounded-full text-sm font-medium border ${getRiskColor(result.riskLevel)}`}
                   >
                     {t(
-                      result.urgency === "urgent" ? "URGENT" : "Monitor",
-                      result.urgency === "urgent" ? "জরুরি সেবা নিন" : "পর্যবেক্ষণে থাকুন",
+                      result.urgency === "urgent" ? "URGENT" : result.urgency === "consult" ? "Consult Doctor" : "Monitor",
+                      result.urgency === "urgent" ? "জরুরি সেবা নিন" : result.urgency === "consult" ? "ডাক্তারের পরামর্শ নিন" : "পর্যবেক্ষণে থাকুন",
                     )}
                   </div>
                 </div>
@@ -180,8 +204,49 @@ export default function HomePage() {
                   </div>
                 )}
 
-                <div className="p-4 bg-muted rounded-lg">
+                <div className="p-4 bg-muted rounded-lg space-y-3">
                   <p className="text-sm leading-relaxed font-medium">{result.message[language]}</p>
+                  
+                  {result.extractedSymptoms.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">
+                        {t("Identified symptoms:", "চিহ্নিত লক্ষণসমূহ:")}
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {result.extractedSymptoms.map((symptom, index) => (
+                          <span key={index} className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-full">
+                            {symptom}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {result.possibleConditions.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">
+                        {t("Possible conditions:", "সম্ভাব্য অবস্থা:")}
+                      </p>
+                      <ul className="text-xs space-y-1">
+                        {result.possibleConditions.map((condition, index) => (
+                          <li key={index} className="text-muted-foreground">• {condition}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {result.recommendations[language].length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">
+                        {t("Recommendations:", "পরামর্শসমূহ:")}
+                      </p>
+                      <ul className="text-xs space-y-1">
+                        {result.recommendations[language].map((rec, index) => (
+                          <li key={index} className="text-muted-foreground">• {rec}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2">

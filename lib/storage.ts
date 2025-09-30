@@ -1,6 +1,6 @@
 export interface HealthLog {
   id: string
-  type: "anemia" | "bp" | "diabetes" | "infection" | "nutrition"
+  type: "anemia" | "bp" | "diabetes" | "infection" | "nutrition" | "symptom-analysis"
   timestamp: number
   data: any
   result: string
