@@ -10,7 +10,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Heart, Shield, Brain, Volume2, Save, AlertTriangle, Activity, Droplet, Apple, Stethoscope } from "lucide-react"
 import Link from "next/link"
 import { analyzeInfection, type InfectionResult } from "@/lib/ai-mock"
-import { analyzeSymptomsCombined, type SymptomAnalysisResult } from "@/lib/ai-symptom-analysis"
+import { symptomAnalysisClient } from "@/lib/symptom-analysis-client"
+import type { AISymptomAnalysisResult } from "@/lib/health-ai-service"
 import { speak } from "@/lib/speech"
 import { saveHealthLog } from "@/lib/storage"
 import { useRouter } from "next/navigation"
@@ -20,8 +21,10 @@ export default function HomePage() {
   const router = useRouter()
   const [symptoms, setSymptoms] = useState<string[]>([])
   const [symptomDescription, setSymptomDescription] = useState<string>("")
-  const [result, setResult] = useState<SymptomAnalysisResult | null>(null)
+  const [result, setResult] = useState<AISymptomAnalysisResult | null>(null)
   const [showSymptomChecker, setShowSymptomChecker] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
 
   const symptomOptions = [
     { id: "fever", en: "Fever (>100.4°F)", bn: "জ্বর (>১০০.৪°F)" },
@@ -40,11 +43,30 @@ export default function HomePage() {
     setSymptoms((prev) => (prev.includes(symptomId) ? prev.filter((s) => s !== symptomId) : [...prev, symptomId]))
   }
 
-  const handleAnalysis = () => {
+  const handleAnalysis = async () => {
     if (symptoms.length === 0 && !symptomDescription.trim()) return
-    const analysisResult = analyzeSymptomsCombined(symptoms, symptomDescription)
-    setResult(analysisResult)
-    speak(analysisResult.message[language], language)
+    
+    setIsAnalyzing(true)
+    setAnalysisError(null)
+    
+    try {
+      const analysisResult = await symptomAnalysisClient.analyzeSymptoms(
+        symptoms, 
+        symptomDescription, 
+        language
+      )
+      setResult(analysisResult)
+      speak(analysisResult.message[language], language)
+    } catch (error) {
+      console.error("Analysis failed:", error)
+      setAnalysisError(
+        language === "bn" 
+          ? "বিশ্লেষণে ত্রুটি হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।"
+          : "Analysis failed. Please try again."
+      )
+    } finally {
+      setIsAnalyzing(false)
+    }
   }
 
   const saveLog = () => {
@@ -149,25 +171,42 @@ export default function HomePage() {
                 <textarea
                   className="w-full min-h-[100px] p-3 border border-input rounded-md bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
                   placeholder={t(
-                    "Describe how you're feeling in English or Bangla. Be as detailed as possible about your symptoms, when they started, and how severe they are...",
-                    "ইংরেজি বা বাংলায় আপনার অনুভূতি বর্ণনা করুন। আপনার লক্ষণগুলি, কখন শুরু হয়েছে এবং কতটা তীব্র সে সম্পর্কে যতটা সম্ভব বিস্তারিত বলুন..."
+                    "Be as detailed as possible about your symptoms, when they started, and how severe they are...",
+                    "আপনার লক্ষণগুলি কখন শুরু হয়েছে এবং কতটা তীব্র সে সম্পর্কে যতটা সম্ভব বিস্তারিত বলুন..."
                   )}
                   value={symptomDescription}
                   onChange={(e) => setSymptomDescription(e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">
-                  {t(
-                    "AI will analyze your description along with selected symptoms to provide better recommendations",
-                    "এআই আপনার বর্ণনা এবং নির্বাচিত লক্ষণগুলি বিশ্লেষণ করে আরও ভাল পরামর্শ দেবে"
-                  )}
-                </p>
+                
               </div>
 
               {(symptoms.length > 0 || symptomDescription.trim()) && (
-                <Button onClick={handleAnalysis} className="w-full" size="lg">
-                  {t("Analyze Symptoms", "লক্ষণ বিশ্লেষণ করুন")} 
-                  {symptoms.length > 0 && ` (${symptoms.length})`}
-                </Button>
+                <>
+                  <Button 
+                    onClick={handleAnalysis} 
+                    className="w-full" 
+                    size="lg"
+                    disabled={isAnalyzing}
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                        {t("Analyzing...", "বিশ্লেষণ করা হচ্ছে...")}
+                      </>
+                    ) : (
+                      <>
+                        {t("Analyze Symptoms", "লক্ষণ বিশ্লেষণ করুন")} 
+                        {symptoms.length > 0 && ` (${symptoms.length})`}
+                      </>
+                    )}
+                  </Button>
+                  
+                  {analysisError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-sm text-red-800">{analysisError}</p>
+                    </div>
+                  )}
+                </>
               )}
             </Card>
 
@@ -175,12 +214,19 @@ export default function HomePage() {
               <Card className="p-5 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold text-lg">{t("Assessment", "মূল্যায়ন")}</h3>
-                  <div
-                    className={`px-3 py-1 rounded-full text-sm font-medium border ${getRiskColor(result.riskLevel)}`}
-                  >
-                    {t(
-                      result.urgency === "urgent" ? "URGENT" : result.urgency === "consult" ? "Consult Doctor" : "Monitor",
-                      result.urgency === "urgent" ? "জরুরি সেবা নিন" : result.urgency === "consult" ? "ডাক্তারের পরামর্শ নিন" : "পর্যবেক্ষণে থাকুন",
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`px-3 py-1 rounded-full text-sm font-medium border ${getRiskColor(result.riskLevel)}`}
+                    >
+                      {t(
+                        result.urgency === "urgent" ? "URGENT" : result.urgency === "consult" ? "Consult Doctor" : "Monitor",
+                        result.urgency === "urgent" ? "জরুরি সেবা নিন" : result.urgency === "consult" ? "ডাক্তারের পরামর্শ নিন" : "পর্যবেক্ষণে থাকুন",
+                      )}
+                    </div>
+                    {result.aiGenerated && (
+                      <div className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full border">
+                        AI
+                      </div>
                     )}
                   </div>
                 </div>
@@ -213,7 +259,7 @@ export default function HomePage() {
                         {t("Identified symptoms:", "চিহ্নিত লক্ষণসমূহ:")}
                       </p>
                       <div className="flex flex-wrap gap-1">
-                        {result.extractedSymptoms.map((symptom, index) => (
+                        {result.extractedSymptoms.map((symptom: string, index: number) => (
                           <span key={index} className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-full">
                             {symptom}
                           </span>
@@ -228,7 +274,7 @@ export default function HomePage() {
                         {t("Possible conditions:", "সম্ভাব্য অবস্থা:")}
                       </p>
                       <ul className="text-xs space-y-1">
-                        {result.possibleConditions.map((condition, index) => (
+                        {result.possibleConditions.map((condition: string, index: number) => (
                           <li key={index} className="text-muted-foreground">• {condition}</li>
                         ))}
                       </ul>
@@ -241,7 +287,7 @@ export default function HomePage() {
                         {t("Recommendations:", "পরামর্শসমূহ:")}
                       </p>
                       <ul className="text-xs space-y-1">
-                        {result.recommendations[language].map((rec, index) => (
+                        {result.recommendations[language].map((rec: string, index: number) => (
                           <li key={index} className="text-muted-foreground">• {rec}</li>
                         ))}
                       </ul>

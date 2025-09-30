@@ -10,7 +10,8 @@ import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ArrowLeft, Volume2, Save, TrendingUp } from "lucide-react"
 import Link from "next/link"
-import { analyzeBP, type BPResult } from "@/lib/ai-mock"
+import { imageAnalysisClient } from "@/lib/image-analysis-client"
+import { type BPResult } from "@/lib/ai-mock"
 import { speak } from "@/lib/speech"
 import { saveHealthLog, getHealthLogs } from "@/lib/storage"
 import { useRouter } from "next/navigation"
@@ -35,15 +36,19 @@ export default function BPToolPage() {
     setSymptoms((prev) => (prev.includes(symptomId) ? prev.filter((s) => s !== symptomId) : [...prev, symptomId]))
   }
 
-  const handleAnalysis = () => {
+  const handleAnalysis = async () => {
     if (!bpImage) return
     setAnalyzing(true)
-    setTimeout(() => {
-      const analysisResult = analyzeBP(bpImage, symptoms)
+    try {
+      const analysisResult = await imageAnalysisClient.analyzeBP(bpImage, symptoms, language)
       setResult(analysisResult)
-      setAnalyzing(false)
       speak(analysisResult.message[language], language)
-    }, 1500)
+    } catch (error) {
+      console.error("BP analysis failed:", error)
+      // Fallback will be handled by the client
+    } finally {
+      setAnalyzing(false)
+    }
   }
 
   const saveLog = () => {

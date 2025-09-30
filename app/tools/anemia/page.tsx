@@ -10,7 +10,8 @@ import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ArrowLeft, Volume2, Save } from "lucide-react"
 import Link from "next/link"
-import { analyzeAnemia, analyzeMealNutrition, type AnemiaResult, type NutritionResult } from "@/lib/ai-mock"
+import { imageAnalysisClient } from "@/lib/image-analysis-client"
+import { type AnemiaResult, type NutritionResult } from "@/lib/ai-mock"
 import { speak } from "@/lib/speech"
 import { saveHealthLog } from "@/lib/storage"
 import { useRouter } from "next/navigation"
@@ -24,26 +25,34 @@ export default function AnemiaToolPage() {
   const [nutritionResult, setNutritionResult] = useState<NutritionResult | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
 
-  const handleAnemiaAnalysis = () => {
+  const handleAnemiaAnalysis = async () => {
     if (!anemiaImage) return
     setAnalyzing(true)
-    setTimeout(() => {
-      const result = analyzeAnemia(anemiaImage)
+    try {
+      const result = await imageAnalysisClient.analyzeAnemia(anemiaImage, language)
       setAnemiaResult(result)
-      setAnalyzing(false)
       speak(result.message[language], language)
-    }, 1500)
+    } catch (error) {
+      console.error("Anemia analysis failed:", error)
+      // Fallback will be handled by the client
+    } finally {
+      setAnalyzing(false)
+    }
   }
 
-  const handleNutritionAnalysis = () => {
+  const handleNutritionAnalysis = async () => {
     if (!mealImage) return
     setAnalyzing(true)
-    setTimeout(() => {
-      const result = analyzeMealNutrition(mealImage)
+    try {
+      const result = await imageAnalysisClient.analyzeNutrition(mealImage, language)
       setNutritionResult(result)
-      setAnalyzing(false)
       speak(result.message[language], language)
-    }, 1500)
+    } catch (error) {
+      console.error("Nutrition analysis failed:", error)
+      // Fallback will be handled by the client
+    } finally {
+      setAnalyzing(false)
+    }
   }
 
   const saveAnemiaLog = () => {
